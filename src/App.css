@@ -691,3 +691,36 @@
   --color-secondary: #b2556a;
   --color-panel-text: #FBE6D8;
 }
+
+/* ── Scalable song lists (added songs + queue) ──────────
+   Each list scrolls inside itself with a fixed viewport, so the panel stays
+   a constant size whether there are 3 songs or 300. Momentum scrolling and
+   containment keep it smooth on touch. */
+.settings-sublabel {
+  opacity: 0.75;
+  font-size: calc(10 / 306 * 100vw);
+}
+.settings-playlist-list.user-song-list,
+.queue-panel .queue-list {
+  max-height: calc(150 / 306 * 100vw);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  content-visibility: auto;
+}
+.settings-playlist-item.user-song-item {
+  display: flex;
+  align-items: center;
+  gap: calc(5 / 306 * 100vw);
+  overflow: hidden;
+}
+.user-song-x {
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+.user-song-name,
+.queue-title-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
