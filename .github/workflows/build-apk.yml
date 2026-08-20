@@ -27,6 +27,16 @@ jobs:
       - name: Build web assets
         run: npx vite build
 
+      - name: Verify songs are bundled
+        run: |
+          count=$(ls dist/*.mp3 2>/dev/null | wc -l)
+          echo "MP3 files bundled into the app: $count"
+          ls dist/*.mp3 2>/dev/null || true
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No .mp3 files in the build! The audio/ folder in the repo has no music. Check on github.com that audio/ shows your .mp3 files — if not, the .gitignore still contains 'audio/*.mp3' or the files were never committed."
+            exit 1
+          fi
+
       - name: Sync Capacitor Android project
         run: npx cap sync android
 

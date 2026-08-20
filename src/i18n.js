@@ -41,6 +41,9 @@ const STRINGS = {
     modeShuffle: 'shuffle',
     modeRepeat: 'repeat',
     desktopOnly: 'This feature needs the desktop app',
+    audioPlayError: "can't play — {msg}",
+    queue: 'up next',
+    lastCrash: 'the app crashed last time — {msg}',
   },
   es: {
     theme: 'tema',
@@ -75,6 +78,9 @@ const STRINGS = {
     modeShuffle: 'aleatorio',
     modeRepeat: 'repetir',
     desktopOnly: 'Esta funci\u00f3n necesita la app de escritorio',
+    audioPlayError: 'no se puede reproducir — {msg}',
+    queue: 'a continuaci\u00f3n',
+    lastCrash: 'la app se cerr\u00f3 la \u00faltima vez — {msg}',
   },
 };
 

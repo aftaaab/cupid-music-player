@@ -31,6 +31,9 @@ export default function useAudioPlayer(tracks, playMode = 'normal', getAudioPath
     return saved !== null ? parseFloat(saved) : 1;
   });
   const [muted, setMuted] = useState(false);
+  const [audioError, setAudioError] = useState(null);
+  const objectUrlRef = useRef(null);
+  const loadedFileRef = useRef(null);
 
   const track = tracks[trackIndex] ?? { title: 'No track', artist: '', file: '', art: null };
   const audio = audioRef.current;
@@ -40,6 +43,11 @@ export default function useAudioPlayer(tracks, playMode = 'normal', getAudioPath
   useEffect(() => {
     const t = tracks[trackIndex];
     if (!t || !t.file) return;
+
+    // Same song already loaded (e.g. the queue was reordered or the playlist
+    // refreshed) — keep playing seamlessly instead of restarting it.
+    if (loadedFileRef.current === t.file) return;
+    loadedFileRef.current = t.file;
 
     let cancelled = false;
     (async () => {
@@ -51,13 +59,44 @@ export default function useAudioPlayer(tracks, playMode = 'normal', getAudioPath
         src = `./${t.file}`;
       }
       if (cancelled || !src) return;
-      audio.src = src;
+      setAudioError(null);
+
+      // For http(s) sources (mobile app / browser), fetch into a blob first:
+      // playback then never depends on the local server's media streaming
+      // support, and any failure yields a precise, visible error (HTTP code)
+      // instead of silence. Desktop file:// sources keep the direct path.
+      let finalSrc = src;
+      if (!src.startsWith('file:')) {
+        try {
+          let res = await fetch(src);
+          if (!res.ok) {
+            const alt = decodeURI(src);
+            if (alt !== src) {
+              const res2 = await fetch(alt).catch(() => null);
+              if (res2 && res2.ok) res = res2;
+            }
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          if (cancelled) return;
+          const url = URL.createObjectURL(blob);
+          if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+          objectUrlRef.current = url;
+          finalSrc = url;
+        } catch (err) {
+          if (cancelled) return;
+          loadedFileRef.current = null; // allow retrying this track
+          setAudioError(`${t.file} — ${err.message}`);
+          // fall through and still try the direct URL as a last resort
+        }
+      }
+      audio.src = finalSrc;
       audio.load();
       setProgress(0);
       setCurrentTime(0);
       setDuration(0);
       if (isPlayingRef.current) {
-        audio.play().catch(() => {});
+        audio.play().catch((e) => setAudioError((p) => p ?? String(e?.message || e)));
       }
     })();
 
@@ -82,10 +121,15 @@ export default function useAudioPlayer(tracks, playMode = 'normal', getAudioPath
       setDuration(audio.duration);
     };
 
+    const onAudioError = () => {
+      const codes = { 1: 'aborted', 2: 'network error', 3: 'decode error', 4: 'file not found or unsupported' };
+      setAudioError((p) => p ?? (codes[audio.error?.code] || `error ${audio.error?.code ?? '?'}`));
+    };
+
     const onEnded = () => {
       if (playModeRef.current === 'repeat') {
         audio.currentTime = 0;
-        audio.play().catch(() => {});
+        audio.play().catch((e) => setAudioError((p) => p ?? String(e?.message || e)));
         return;
       }
       setTrackIndex((prev) => {
@@ -101,17 +145,19 @@ export default function useAudioPlayer(tracks, playMode = 'normal', getAudioPath
 
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('error', onAudioError);
     audio.addEventListener('ended', onEnded);
 
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('error', onAudioError);
       audio.removeEventListener('ended', onEnded);
     };
   }, [tracks]);
 
   const play = useCallback(() => {
-    audio.play().catch(() => {});
+    audio.play().catch((e) => setAudioError((p) => p ?? String(e?.message || e)));
     setIsPlaying(true);
   }, []);
 
@@ -205,10 +251,30 @@ export default function useAudioPlayer(tracks, playMode = 'normal', getAudioPath
     };
   }, [play, pause, prev, next]);
 
+  useEffect(() => () => {
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+  }, []);
+
+  const selectTrack = useCallback((index) => {
+    setTrackIndex((prev) => {
+      if (index < 0 || index >= prevTracksRef.current.length) return prev;
+      return index;
+    });
+    setIsPlaying(true);
+    // Playback starts via the load effect; if the same track was selected,
+    // just make sure it's playing.
+    if (tracks[index] && loadedFileRef.current === tracks[index].file) {
+      audio.play().catch((e) => setAudioError((p) => p ?? String(e?.message || e)));
+    }
+  }, [tracks]);
+
   return {
     track,
     trackIndex,
     isPlaying,
+    audioError,
+    selectTrack,
+    syncTrackIndex: setTrackIndex,
     progress,
     duration,
     currentTime,

@@ -75,15 +75,6 @@ export function resolveUserAudio(filename) {
   return audioUrlByFile.get(filename) ?? null;
 }
 
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(',')[1]);
-    r.onerror = () => reject(new Error('read failed'));
-    r.readAsDataURL(file);
-  });
-}
-
 function uint8ToBase64(data) {
   let bin = '';
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
@@ -119,19 +110,30 @@ async function extractTags(file) {
 }
 
 /** Copy picked files into app storage and append them to the user playlist. */
+const CHUNK_BYTES = 750 * 1024; // keep each bridge payload ~1MB of base64
+
+async function writeFileChunked(path, file) {
+  const buf = new Uint8Array(await file.arrayBuffer());
+  for (let offset = 0; offset < buf.length; offset += CHUNK_BYTES) {
+    const chunk = buf.subarray(offset, Math.min(offset + CHUNK_BYTES, buf.length));
+    const b64 = uint8ToBase64(chunk);
+    if (offset === 0) {
+      await Filesystem.writeFile({ path, directory: Directory.Data, data: b64, recursive: true });
+    } else {
+      await Filesystem.appendFile({ path, directory: Directory.Data, data: b64 });
+    }
+    // yield to the UI thread between chunks so the app stays responsive
+    await new Promise((r) => setTimeout(r, 0));
+  }
+}
+
 export async function addSongs(files, onProgress) {
   const list = await readPlaylistRaw();
   let done = 0;
   for (const file of files) {
     const safe =
       Date.now().toString(36) + '-' + file.name.replace(/[^\w.\- ()]+/g, '_');
-    const b64 = await fileToBase64(file);
-    await Filesystem.writeFile({
-      path: `${AUDIO_DIR}/${safe}`,
-      directory: Directory.Data,
-      data: b64,
-      recursive: true,
-    });
+    await writeFileChunked(`${AUDIO_DIR}/${safe}`, file);
 
     const tags = await extractTags(file);
     const fb = fallbackFromFilename(file.name);

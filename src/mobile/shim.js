@@ -19,6 +19,37 @@ function notAvailable() {
 if (!window.cupid) {
   const base = new URL('.', window.location.href);
 
+  // Bundled-file manifest (dist/files.json, written at build time) lets us
+  // match playlist entries to real files even when capitalization, accents,
+  // or spacing differ — Android's filesystem is case-sensitive, Windows
+  // (where the playlist gets edited) is not.
+  let manifestPromise = null;
+  const normalize = (name) =>
+    name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '');
+  async function resolveBundledName(filename) {
+    try {
+      if (!manifestPromise) {
+        manifestPromise = fetch(new URL('files.json', base), { cache: 'no-store' })
+          .then((r) => (r.ok ? r.json() : []))
+          .catch(() => []);
+      }
+      const files = await manifestPromise;
+      if (files.includes(filename)) return filename;
+      const want = normalize(filename);
+      const hit = files.find((f) => normalize(f) === want);
+      if (hit) return hit;
+      // last resort: match ignoring extension differences
+      const stem = normalize(filename.replace(/\.[^.]+$/, ''));
+      const loose = files.find((f) => normalize(f.replace(/\.[^.]+$/, '')) === stem);
+      if (loose) return loose;
+    } catch { /* fall through */ }
+    return filename;
+  }
+
   window.cupid = {
     version: 'mobile',
     platform: 'android',
@@ -64,7 +95,8 @@ if (!window.cupid) {
         const userUrl = resolveUserAudio(filename);
         if (userUrl) return userUrl;
       } catch { /* library unavailable */ }
-      return new URL(encodeURIComponent(filename).replace(/%2F/g, '/'), base).href;
+      const actual = await resolveBundledName(filename);
+      return new URL(encodeURIComponent(actual).replace(/%2F/g, '/'), base).href;
     },
 
     openMusicFolder: notAvailable,
@@ -79,6 +111,17 @@ if (!window.cupid) {
   };
 
   document.documentElement.classList.add('cupid-mobile');
+
+  // Crash trap: if the app ever dies or throws fatally, keep the reason so
+  // it can be shown in settings on the next launch instead of a silent
+  // black screen with no clues.
+  const recordCrash = (msg) => {
+    try { localStorage.setItem('cupid-last-crash', `${new Date().toISOString()} ${msg}`.slice(0, 500)); } catch { /* ignore */ }
+  };
+  window.addEventListener('error', (e) => recordCrash(e.message || 'unknown error'));
+  window.addEventListener('unhandledrejection', (e) =>
+    recordCrash(`unhandled: ${e.reason?.message || e.reason || '?'}`)
+  );
 
   // Keep the phone screen behaving like a fixed player window
   document.addEventListener('gesturestart', (e) => e.preventDefault());

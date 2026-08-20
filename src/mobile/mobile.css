@@ -61,3 +61,66 @@ html.cupid-mobile textarea {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* Move the settings gear into the top-right corner where the desktop
+   window buttons used to be (sprite layer + its click target move together) */
+html.cupid-mobile .settings-layer,
+html.cupid-mobile .btn-settings {
+  transform: translateX(calc(73 / 306 * 100vw));
+}
+html.cupid-mobile .settings-layer {
+  transform: translateX(calc(73 / 306 * 100vw)) scale(0.85);
+}
+
+/* Allow long-press paste/copy menus on text inputs (touch-callout was
+   disabled globally for the app-like feel, which blocked pasting) */
+html.cupid-mobile input,
+html.cupid-mobile textarea {
+  -webkit-touch-callout: default;
+}
+
+/* ── Queue button + panel (mobile only) ── */
+html.cupid-mobile .btn-queue {
+  left: calc((331 - 110) / 306 * 100vw);
+  top: calc((48 - 23) / 306 * 100vw);
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-title);
+}
+html.cupid-mobile .queue-icon {
+  width: 72%;
+  height: 72%;
+  image-rendering: pixelated;
+}
+html.cupid-mobile .queue-panel .settings-panel-inner {
+  width: calc(180 / 306 * 100vw);
+  max-height: calc(300 / 306 * 100vw);
+}
+html.cupid-mobile .queue-row {
+  display: flex;
+  align-items: center;
+  gap: calc(4 / 306 * 100vw);
+  padding: calc(2 / 306 * 100vw) 0;
+  font-size: calc(9 / 306 * 100vw);
+  color: var(--color-panel-text);
+  border-bottom: calc(1 / 306 * 100vw) solid var(--color-secondary);
+}
+html.cupid-mobile .queue-row.current .queue-title {
+  color: #fff;
+  font-weight: bold;
+}
+html.cupid-mobile .queue-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+html.cupid-mobile .queue-ctl {
+  flex: 0 0 auto;
+  padding: calc(2 / 306 * 100vw) calc(3 / 306 * 100vw);
+  cursor: pointer;
+  opacity: 0.85;
+}

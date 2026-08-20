@@ -224,8 +224,26 @@ export default function App() {
   const loadLocalPlaylist = useCallback(async () => {
     if (!window.cupid?.getLocalPlaylist) return;
     try {
-      const tracks = await window.cupid.getLocalPlaylist();
-      setLocalTracks(Array.isArray(tracks) ? tracks : []);
+      let tracks = await window.cupid.getLocalPlaylist();
+      if (!Array.isArray(tracks)) tracks = [];
+      // Apply the user's saved queue order (unknown/new songs go to the end)
+      try {
+        const saved = JSON.parse(localStorage.getItem('cupid-local-order') || 'null');
+        if (Array.isArray(saved) && saved.length) {
+          const pos = new Map(saved.map((f, i) => [f, i]));
+          tracks = tracks
+            .map((tr, i) => [tr, pos.has(tr.file) ? pos.get(tr.file) : saved.length + i])
+            .sort((a, b) => a[1] - b[1])
+            .map(([tr]) => tr);
+        }
+      } catch { /* ignore bad saved order */ }
+      const playingFile = localFileRef.current;
+      setLocalTracks(tracks);
+      // Re-point the index at the same song if its position shifted
+      if (playingFile) {
+        const idx = tracks.findIndex((x) => x.file === playingFile);
+        if (idx >= 0) localSyncRef.current(idx);
+      }
     } catch (err) {
       console.error('Failed to load local playlist:', err);
     }
@@ -237,6 +255,7 @@ export default function App() {
   const hasMobileLibrary = window.cupid?.platform === 'android';
   const songInputRef = useRef(null);
   const [addingSongs, setAddingSongs] = useState(false);
+  const [addingProgress, setAddingProgress] = useState('');
   const [userSongs, setUserSongs] = useState([]);
 
   const refreshUserSongs = useCallback(async () => {
@@ -249,6 +268,41 @@ export default function App() {
 
   useEffect(() => { refreshUserSongs(); }, [refreshUserSongs]);
 
+  // ── Queue panel (mobile): view, reorder, and trim the play queue ──
+  const [showQueue, setShowQueue] = useState(false);
+
+  const persistLocalOrder = (arr) => {
+    try { localStorage.setItem('cupid-local-order', JSON.stringify(arr.map((x) => x.file))); } catch { /* ignore */ }
+  };
+
+  const moveTrack = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= localTracks.length) return;
+    const arr = localTracks.slice();
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+    persistLocalOrder(arr);
+    const cur = local.trackIndex;
+    setLocalTracks(arr);
+    if (cur === i) local.syncTrackIndex(j);
+    else if (cur === j) local.syncTrackIndex(i);
+  };
+
+  const removeFromQueue = (i) => {
+    const arr = localTracks.filter((_, k) => k !== i);
+    persistLocalOrder(arr);
+    const cur = local.trackIndex;
+    setLocalTracks(arr);
+    if (i < cur) local.syncTrackIndex(cur - 1);
+  };
+
+  useEffect(() => {
+    if (hasMobileLibrary && musicService !== 'local') {
+      setMusicService('local');
+      setSource('local');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleAddSongs = useCallback(async (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
@@ -256,7 +310,7 @@ export default function App() {
     setAddingSongs(true);
     try {
       const { addSongs } = await import('./mobile/library.js');
-      await addSongs(files);
+      await addSongs(files, (done, total) => setAddingProgress(`${done}/${total}`));
       await refreshUserSongs();
       await loadLocalPlaylist();
       setSettingsError(null);
@@ -264,6 +318,7 @@ export default function App() {
       setSettingsError(t('addSongsError', { msg: err.message }));
     } finally {
       setAddingSongs(false);
+      setAddingProgress('');
     }
   }, [refreshUserSongs, loadLocalPlaylist, t]);
 
@@ -280,6 +335,10 @@ export default function App() {
   }, [refreshUserSongs, loadLocalPlaylist, t]);
 
   const local = useAudioPlayer(localTracks, playMode, window.cupid?.getLocalAudioPath);
+  const localFileRef = useRef(null);
+  localFileRef.current = local.track?.file || null;
+  const localSyncRef = useRef(local.syncTrackIndex);
+  localSyncRef.current = local.syncTrackIndex;
   const streaming = useSpotifyPlayer(streamTracks, playMode);
   const player = source === 'streaming' ? streaming : local;
 
@@ -288,6 +347,51 @@ export default function App() {
   useEffect(() => {
     try { window.CupidNative?.setPlaying(!!player.isPlaying); } catch { /* desktop */ }
   }, [player.isPlaying]);
+
+  // Native media notification (lock screen / shade): receive commands and
+  // publish now-playing metadata.
+  const playerRef = useRef(player);
+  playerRef.current = player;
+  useEffect(() => {
+    window.__cupidMedia = (cmd) => {
+      const p = playerRef.current;
+      if (!p) return;
+      if (cmd === 'toggle') p.togglePlay();
+      else if (cmd === 'next') p.next();
+      else if (cmd === 'prev') p.prev();
+    };
+    return () => { delete window.__cupidMedia; };
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.CupidNative?.setNowPlaying?.(JSON.stringify({
+        title: player.track?.title === 'No track' ? '' : (player.track?.title || ''),
+        artist: player.track?.artist || '',
+        art: player.track?.art || '',
+        playing: !!player.isPlaying,
+      }));
+    } catch { /* desktop */ }
+  }, [player.track, player.isPlaying]);
+
+  // Show the reason for any crash from the previous session (recorded by the
+  // shim's global error trap), then clear it.
+  useEffect(() => {
+    try {
+      const crash = localStorage.getItem('cupid-last-crash');
+      if (crash) {
+        localStorage.removeItem('cupid-last-crash');
+        setSettingsError(t('lastCrash', { msg: crash }));
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Surface audio load/playback failures in the settings panel instead of
+  // failing silently (the #1 debugging pain on mobile).
+  useEffect(() => {
+    if (local.audioError) setSettingsError(t('audioPlayError', { msg: local.audioError }));
+  }, [local.audioError, t]);
 
   const {
     track,
@@ -742,7 +846,34 @@ export default function App() {
       )}
 
       {/* Settings button */}
-      <div className="btn btn-settings" onClick={() => setShowSettings((v) => !v)} />
+      <div className="btn btn-settings" onClick={() => { setShowQueue(false); setShowSettings((v) => !v); }} />
+      {hasMobileLibrary && (
+        <div className="btn btn-queue" onClick={() => { setShowSettings(false); setShowQueue((v) => !v); }}>
+          <svg viewBox="0 0 10 10" className="queue-icon" aria-hidden="true">
+            <path d="M1 2h8v1H1zM1 4.5h8v1H1zM1 7h5v1H1zM7.5 6.2v2.3h1V6.2z" fill="currentColor" />
+          </svg>
+        </div>
+      )}
+      {hasMobileLibrary && showQueue && (
+        <div className="settings-panel queue-panel">
+          <div className="settings-panel-inner">
+            <div className="settings-label">{t('queue')}</div>
+            {localTracks.length === 0 && (
+              <div className="queue-row"><span className="queue-title">{t('noTrack').toLowerCase()}</span></div>
+            )}
+            {localTracks.map((tr, i) => (
+              <div key={tr.file} className={`queue-row ${i === local.trackIndex ? 'current' : ''}`}>
+                <span className="queue-title" onClick={() => local.selectTrack(i)}>
+                  {i === local.trackIndex ? '\u266a ' : ''}{tr.title}
+                </span>
+                <span className="queue-ctl" onClick={() => moveTrack(i, -1)}>{'\u25b2'}</span>
+                <span className="queue-ctl" onClick={() => moveTrack(i, 1)}>{'\u25bc'}</span>
+                <span className="queue-ctl" onClick={() => removeFromQueue(i)}>{'\u2715'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Debug overlays — toggle with showDebug state */}
       {showDebug && (
@@ -792,7 +923,9 @@ export default function App() {
             <div className="settings-label">{t('music')}</div>
             <SettingsDropdown
               value={musicService}
-              options={[
+              options={hasMobileLibrary ? [
+                { value: 'local', label: 'local' },
+              ] : [
                 { value: 'local', label: 'local' },
                 { value: 'spotify', label: 'spotify' },
                 { value: 'apple', label: 'apple' },
@@ -817,7 +950,7 @@ export default function App() {
                       disabled={addingSongs}
                       onClick={() => songInputRef.current?.click()}
                     >
-                      {addingSongs ? t('adding') : t('addSongs')}
+                      {addingSongs ? `${t('adding')} ${addingProgress}` : t('addSongs')}
                     </button>
                   )}
                 </div>
