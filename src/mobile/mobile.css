@@ -124,3 +124,22 @@ html.cupid-mobile .queue-ctl {
   cursor: pointer;
   opacity: 0.85;
 }
+
+/* Queue list gets its own scroll viewport so the panel never outgrows
+   the screen, no matter how many songs are in the queue */
+html.cupid-mobile .queue-panel .queue-list {
+  max-height: calc(210 / 306 * 100vw);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  content-visibility: auto;
+}
+html.cupid-mobile .queue-panel .queue-list::-webkit-scrollbar {
+  display: none;
+}
+html.cupid-mobile .queue-title {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
