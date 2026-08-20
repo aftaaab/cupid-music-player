@@ -966,14 +966,14 @@ export default function App() {
                 )}
                 {hasMobileLibrary && userSongs.length > 0 && (
                   <div className="settings-playlist-list">
-                    {userSongs.map((t) => (
+                    {userSongs.map((song) => (
                       <div
-                        key={t.file}
+                        key={song.file}
                         className="settings-playlist-item"
-                        onClick={() => handleRemoveSong(t)}
+                        onClick={() => handleRemoveSong(song)}
                         title={t('tapToRemove')}
                       >
-                        {'\u2715'} {t.title}{t.artist ? ` \u2014 ${t.artist}` : ''}
+                        {'\u2715'} {song.title}{song.artist ? ` \u2014 ${song.artist}` : ''}
                       </div>
                     ))}
                   </div>
