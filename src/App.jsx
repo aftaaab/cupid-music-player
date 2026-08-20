@@ -603,10 +603,14 @@ export default function App() {
         style={{ opacity: playMode === 'normal' ? 0.4 : 0.8 }}
       />
 
-      {/* Window control layers (visual only) */}
-      <img src={assets.minimizerButton} className="layer layer-ui" alt="" draggable={false} />
-      <img src={assets.windowButton} className="layer layer-ui" alt="" draggable={false} />
-      <img src={assets.exitButton} className="layer layer-ui" alt="" draggable={false} />
+      {/* Window control layers (visual only) — desktop frame controls, hidden on mobile */}
+      {!hasMobileLibrary && (
+        <>
+          <img src={assets.minimizerButton} className="layer layer-ui" alt="" draggable={false} />
+          <img src={assets.windowButton} className="layer layer-ui" alt="" draggable={false} />
+          <img src={assets.exitButton} className="layer layer-ui" alt="" draggable={false} />
+        </>
+      )}
 
       {/* Settings button layer */}
       <img src={assets.settings} className="layer layer-ui settings-layer" alt="" draggable={false} />
@@ -728,10 +732,14 @@ export default function App() {
       {/* Shuffle/repeat click target */}
       <div className="btn btn-playmode" onClick={cyclePlayMode} title={t(playMode === 'shuffle' ? 'modeShuffle' : playMode === 'repeat' ? 'modeRepeat' : 'modeNormal')} />
 
-      {/* Window control click targets */}
-      <div className="btn btn-minimize" onClick={() => window.cupid?.minimize()} />
-      <div className="btn btn-window" onClick={() => window.cupid?.maximize()} />
-      <div className="btn btn-exit" onClick={() => window.cupid?.close()} />
+      {/* Window control click targets — desktop only */}
+      {!hasMobileLibrary && (
+        <>
+          <div className="btn btn-minimize" onClick={() => window.cupid?.minimize()} />
+          <div className="btn btn-window" onClick={() => window.cupid?.maximize()} />
+          <div className="btn btn-exit" onClick={() => window.cupid?.close()} />
+        </>
+      )}
 
       {/* Settings button */}
       <div className="btn btn-settings" onClick={() => setShowSettings((v) => !v)} />
