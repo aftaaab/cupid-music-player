@@ -1,0 +1,12 @@
+{
+	"appId": "com.cupid.player",
+	"appName": "Cupid Player",
+	"webDir": "dist",
+	"android": {
+		"allowMixedContent": false,
+		"backgroundColor": "#1b1016"
+	},
+	"server": {
+		"androidScheme": "https"
+	}
+}
