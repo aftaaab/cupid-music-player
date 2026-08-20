@@ -514,7 +514,7 @@ export default function App() {
     }
   }, [t]);
 
-  const { theme, toggleTheme, selectTheme, assets } = useTheme();
+  const { theme, selectTheme, assets } = useTheme();
 
   const [recordFrame, setRecordFrame] = useState(0);
   const [needleFrame, setNeedleFrame] = useState(0);
@@ -857,20 +857,27 @@ export default function App() {
       {hasMobileLibrary && showQueue && (
         <div className="settings-panel queue-panel">
           <div className="settings-panel-inner">
-            <div className="settings-label">{t('queue')}</div>
+            <div className="settings-label">
+              {t('queue')}{localTracks.length ? ` (${localTracks.length})` : ''}
+            </div>
+            <div className="queue-list">
             {localTracks.length === 0 && (
               <div className="queue-row"><span className="queue-title">{t('noTrack').toLowerCase()}</span></div>
             )}
             {localTracks.map((tr, i) => (
               <div key={tr.file} className={`queue-row ${i === local.trackIndex ? 'current' : ''}`}>
                 <span className="queue-title" onClick={() => local.selectTrack(i)}>
-                  {i === local.trackIndex ? '\u266a ' : ''}{tr.title}
+                  <MarqueeText
+                    className="queue-title-text"
+                    text={`${i === local.trackIndex ? '\u266a ' : ''}${tr.title}`}
+                  />
                 </span>
                 <span className="queue-ctl" onClick={() => moveTrack(i, -1)}>{'\u25b2'}</span>
                 <span className="queue-ctl" onClick={() => moveTrack(i, 1)}>{'\u25bc'}</span>
                 <span className="queue-ctl" onClick={() => removeFromQueue(i)}>{'\u2715'}</span>
               </div>
             ))}
+            </div>
           </div>
         </div>
       )}
@@ -965,18 +972,27 @@ export default function App() {
                   />
                 )}
                 {hasMobileLibrary && userSongs.length > 0 && (
-                  <div className="settings-playlist-list">
-                    {userSongs.map((song) => (
-                      <div
-                        key={song.file}
-                        className="settings-playlist-item"
-                        onClick={() => handleRemoveSong(song)}
-                        title={t('tapToRemove')}
-                      >
-                        {'\u2715'} {song.title}{song.artist ? ` \u2014 ${song.artist}` : ''}
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    <div className="settings-label settings-sublabel">
+                      {t('addedCount', { n: userSongs.length })}
+                    </div>
+                    <div className="settings-playlist-list user-song-list">
+                      {userSongs.map((song) => (
+                        <div
+                          key={song.file}
+                          className="settings-playlist-item user-song-item"
+                          onClick={() => handleRemoveSong(song)}
+                          title={t('tapToRemove')}
+                        >
+                          <span className="user-song-x">{'\u2715'}</span>
+                          <MarqueeText
+                            className="user-song-name"
+                            text={`${song.title}${song.artist ? ` \u2014 ${song.artist}` : ''}`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </>
             )}
